@@ -10,5 +10,25 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Secrets — never committed
-.env
+# Build artifacts
+dist/
+*.egg-info/
+
+# Secrets — keep the example template
+.env*
+!.env.example
+
+# OS and logs
+.DS_Store
+*.log
+
+# Editor settings — personal, not part of the project
+.vscode/
+
+# Compiled CUDA/C outputs — rebuilt from kernels/
+build/
+*.o
+
+# Profiler captures — large binaries; summaries go to results/
+*.nsys-rep
+*.ncu-rep
