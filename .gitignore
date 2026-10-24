@@ -1,0 +1,14 @@
+# Virtual environment — created locally, rebuilt from pyproject.toml
+.venv/
+
+# Python bytecode cache — generated when a module is imported
+__pycache__/
+*.pyc
+
+# Tool caches — regenerated on every run
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets — never committed
+.env
