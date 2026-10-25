@@ -70,3 +70,19 @@ def _gpu() -> dict[str, str]:
                 "gpu_memory": gpu_info[2].strip(),
                 "gpu_count": str(gpu_count),
             }
+
+
+def _cuda_toolkit() -> str:
+    """Read the CUDA toolkit version from nvcc, e.g. "13.4".
+
+    Never raises: on any failure, returns the reason instead.
+    """
+    output, reason = _run(["nvcc", "--version"])
+
+    if output is None:
+        return f"not recorded: {reason or 'no output'}"
+    lines = output.splitlines()
+    for line in lines:
+        if "release " in line:
+            return line.split("release ")[1].split(",")[0]
+    return "not recorded: no release line in nvcc output"
