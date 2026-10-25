@@ -6,6 +6,7 @@ so a number can always be traced to the machine that produced it.
 """
 
 import subprocess
+from pathlib import Path
 
 
 def _run(command: list[str]) -> tuple[str | None, str | None]:
@@ -86,3 +87,18 @@ def _cuda_toolkit() -> str:
         if "release " in line:
             return line.split("release ")[1].split(",")[0]
     return "not recorded: no release line in nvcc output"
+
+
+def _cpu() -> str:
+    """Read the CPU model name from /proc/cpuinfo.
+
+    Never raises: on any failure, returns the reason instead.
+    """
+    try:
+        text = Path("/proc/cpuinfo").read_text()
+    except OSError:
+        return "not recorded: cannot read /proc/cpuinfo"
+    for line in text.splitlines():
+        if line.startswith("model name"):
+            return line.partition(":")[2].strip()
+    return "not recorded: no model name in /proc/cpuinfo"
