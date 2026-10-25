@@ -40,6 +40,8 @@ same architecture, not across generations.
   utilization as not supported there. To be tested in phase 2.
 - **Colab does not guarantee which GPU a session gets**: every Colab result
   records the GPU it actually ran on.
+- **Multi-GPU machines are not fully described**: the environment stamp
+  records the first GPU that `nvidia-smi` lists and only counts the others.
 
 ## License
 
