@@ -32,3 +32,6 @@ build/
 # Profiler captures — large binaries; summaries go to results/
 *.nsys-rep
 *.ncu-rep
+
+# Windows download marker, shows up when copying files into WSL
+*:Zone.Identifier

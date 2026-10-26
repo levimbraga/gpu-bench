@@ -14,7 +14,7 @@ No results yet. The first numbers arrive with phase 1, the timing harness.
 
 | Phase | Question it answers | Status |
 |---|---|---|
-| 0 | Where do the numbers come from? (environments, repository) | in progress |
+| 0 | Where do the numbers come from? (environments, repository) | [done](docs/phase-0-environments.md) |
 | 1 | How fast is the same operation on CPU and GPU, timed correctly? | not yet |
 | 2 | What is the GPU doing while it runs? (telemetry) | not yet |
 | 3 | How fast does a real model run inference? | not yet |
