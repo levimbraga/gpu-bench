@@ -5,6 +5,7 @@ Every result in this repository is stamped with this dictionary,
 so a number can always be traced to the machine that produced it.
 """
 
+import platform
 import subprocess
 from pathlib import Path
 
@@ -102,3 +103,36 @@ def _cpu() -> str:
         if line.startswith("model name"):
             return line.partition(":")[2].strip()
     return "not recorded: no model name in /proc/cpuinfo"
+
+
+def _python() -> str:
+    """Return the running Python version, e.g "3.13.17"."""
+
+    return platform.python_version()
+
+
+def _os() -> str:
+    """Read the OS name from /etc/os-release, e.g. "Ubuntu 26.04.1 LTS".
+
+    Never raises: on any failure, returns the reason instead.
+    """
+    try:
+        text = Path("/etc/os-release").read_text()
+    except OSError:
+        return "not recorded: cannot read /etc/os-release"
+    for line in text.splitlines():
+        if line.startswith("PRETTY_NAME="):
+            return line.partition("=")[2].strip('"')
+    return "not recorded: no PRETTY_NAME in /etc/os-release"
+
+
+def _is_wsl() -> str:
+    """Return "yes" under WSL, "no" otherwise.
+
+    Never raises: if /proc/version cannot be read, returns the reason.
+    """
+    try:
+        text = Path("/proc/version").read_text()
+    except OSError:
+        return "not recorded: cannot read /proc/version"
+    return "yes" if "microsoft" in text.lower() else "no"
