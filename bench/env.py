@@ -8,6 +8,7 @@ so a number can always be traced to the machine that produced it.
 import importlib.util
 import platform
 import subprocess
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -168,3 +169,27 @@ def _libraries() -> dict[str, str]:
         except PackageNotFoundError:
             versions[name] = "not installed"
     return versions
+
+
+def _timestamp() -> str:
+    """Return the current time in UTC, ISO 8601, to the second."""
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def collect_environment() -> dict[str, str]:
+    """Return the environment stamp for a benchmark result.
+
+    Never raises: every field holds either a value or the reason
+    it could not be recorded.
+    """
+    return {
+        **_gpu(),
+        "cuda_toolkit": _cuda_toolkit(),
+        "cpu": _cpu(),
+        "python": _python(),
+        "os": _os(),
+        "is_wsl": _is_wsl(),
+        "is_cloud": _is_cloud(),
+        **_libraries(),
+        "timestamp": _timestamp(),
+    }
