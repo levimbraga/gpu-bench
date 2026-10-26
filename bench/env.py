@@ -6,6 +6,7 @@ so a number can always be traced to the machine that produced it.
 """
 
 import importlib.util
+import json
 import platform
 import subprocess
 from datetime import UTC, datetime
@@ -67,17 +68,15 @@ def _gpu() -> dict[str, str]:
     gpu_count = len(lines)
     if not lines:
         return _gpu_not_recorded("nvidia-smi returned no GPUs")
-    else:
-        gpu_info = lines[0].split(",")
-        if len(gpu_info) != 3:
-            return _gpu_not_recorded("unexpected nvidia-smi output")
-        else:
-            return {
-                "gpu": gpu_info[0].strip(),
-                "gpu_driver": gpu_info[1].strip(),
-                "gpu_memory": gpu_info[2].strip(),
-                "gpu_count": str(gpu_count),
-            }
+    gpu_info = lines[0].split(",")
+    if len(gpu_info) != 3:
+        return _gpu_not_recorded("unexpected nvidia-smi output")
+    return {
+        "gpu": gpu_info[0].strip(),
+        "gpu_driver": gpu_info[1].strip(),
+        "gpu_memory": gpu_info[2].strip(),
+        "gpu_count": str(gpu_count),
+    }
 
 
 def _cuda_toolkit() -> str:
@@ -112,8 +111,7 @@ def _cpu() -> str:
 
 
 def _python() -> str:
-    """Return the running Python version, e.g "3.13.17"."""
-
+    """Return the running Python version, e.g. "3.13.17"."""
     return platform.python_version()
 
 
@@ -193,3 +191,7 @@ def collect_environment() -> dict[str, str]:
         **_libraries(),
         "timestamp": _timestamp(),
     }
+
+
+if __name__ == "__main__":
+    print(json.dumps(collect_environment(), indent=2))
