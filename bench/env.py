@@ -5,9 +5,14 @@ Every result in this repository is stamped with this dictionary,
 so a number can always be traced to the machine that produced it.
 """
 
+import importlib.util
 import platform
 import subprocess
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+# Libraries whose version can change a benchmark result.
+_LIBRARIES = ("numpy", "torch")
 
 
 def _run(command: list[str]) -> tuple[str | None, str | None]:
@@ -136,3 +141,30 @@ def _is_wsl() -> str:
     except OSError:
         return "not recorded: cannot read /proc/version"
     return "yes" if "microsoft" in text.lower() else "no"
+
+
+def _is_cloud() -> str:
+    """Return "yes" inside Google Colab, "no" otherwise.
+
+    Detects Colab by its google.colab package, without importing it.
+    """
+    try:
+        spec = importlib.util.find_spec("google.colab")
+    except ModuleNotFoundError:
+        return "no"
+    return "no" if spec is None else "yes"
+
+
+def _libraries() -> dict[str, str]:
+    """Return the installed version of each benchmarked library.
+
+    Reads package metadata instead of importing, so nothing heavy
+    (like CUDA) is loaded just to read a version number.
+    """
+    versions: dict[str, str] = {}
+    for name in _LIBRARIES:
+        try:
+            versions[name] = version(name)
+        except PackageNotFoundError:
+            versions[name] = "not installed"
+    return versions
