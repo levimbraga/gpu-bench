@@ -189,6 +189,29 @@ and 2 stay in `results/` as the before.
 - `git_commit` on every row equal to the commit that adds these
   expectations, without `+dirty`.
 
+**What happened (2026-10-29 17:29 UTC, `results/20261029T172926Z_nvidia-geforce-rtx-2060.csv`, commit `e4357c2`):**
+
+All 135 rows passed the correctness check; `git_commit` was `e4357c2`
+on every row, without `+dirty`, as expected. The other expectations
+failed, because the machine was busier than in Run 1: VS Code, Spotify and
+several Firefox tabs were open.
+
+- PyTorch: synchronized timer below the events in 8 of 20 pairs, not 5.
+  CuPy, whose code did not change, went from 2 to 7.
+- PyTorch `matmul` 256: 0.244 ms against CuPy's 0.178 ms, 37% apart, not
+  within 30%. CuPy itself went from 0.093 to 0.178 ms.
+- `matmul` 4096: 22.0 ms on CuPy (+5%) and 22.9 ms on PyTorch (+10%), not
+  within 5%.
+- CuPy `matmul` 2048: events still above the synchronized timer, as
+  expected, but only 4% above (3.05 against 2.94 ms; Run 1: 43%).
+
+**Not expected:** the whole run was slower and noisier. Median time
+against Run 1, on the reference clocks: NumPy 1.16×, CuPy 1.09×, PyTorch
+1.01×. NumPy `matmul` 4096 took 1,016 ms against 787 ms, with no change to
+its code. The median RSD rose from 21% to 37%, with 51 rows above 50%
+(Run 1: 22). This run cannot show the effect of the fix: the noise is
+larger than the effect.
+
 ### Run 4 — Colab T4, same command, after the fixes
 
 **Expectation (written before running):**
@@ -199,3 +222,46 @@ and 2 stay in `results/` as the before.
   other (Run 2: 0.866 against 0.537 ms).
 - `matmul` 4096 unchanged within 5%: about 35 ms, 3.9 TFLOP/s.
 - RSD as low as in Run 2: a median around 8%.
+
+**What happened (2026-10-29 17:30 UTC, `results/20261029T173230Z_tesla-t4.csv`, commit `a724354`):**
+
+All 135 rows passed the correctness check.
+
+- PyTorch: synchronized timer below the events in 11 of 20 pairs, not 5:
+  the same count as in Run 2. Expectation failed. But the gaps are a few
+  microseconds: the median of events minus synchronized timer on PyTorch
+  fell from 2.5 µs (Run 2) to 0.8 µs. At sizes where the GPU finishes
+  before Python has queued the end marker, both clocks mostly measure
+  CPU-side work, and which reads higher is not a law. The count was a
+  poor test.
+- PyTorch `matmul` 1024: events 0.529 ms against 0.528 ms on the
+  synchronized timer, within 10% as expected (Run 2: 0.866 against
+  0.537 ms). The gap the bug was suspected of causing is gone.
+- `matmul` 4096: 30.7 ms on CuPy and 31.2 ms on PyTorch, about 12% faster
+  than Run 2 (34.7 and 35.0 ms), not within 5%. Both libraries moved the
+  same way, CuPy included, whose code did not change: this Colab session's
+  T4 was faster. 4.5 TFLOP/s against 3.9.
+- RSD median 6.7%, as low as in Run 2 (7.9%), as expected.
+
+**Not expected:**
+
+- Two Colab sessions of the same T4 model differed by 12% on the same
+  operation, with the same code on CuPy. One run per machine is not
+  enough to state a T4 number to better than about that.
+- CuPy `matmul` 2048 read 6.07 ms on events against 3.80 ms on the
+  synchronized timer, after about 7.5 s of NumPy on the same size: the
+  warm-up gap seen on the RTX 2060 in Run 1, now on the T4.
+
+### Run 5 — RTX 2060, all operations, nothing else open
+
+**Expectation (written before running):** the same command as Run 3, with
+VS Code, Spotify and Firefox closed, from a plain terminal.
+
+- NumPy back to Run 1 within 5%: `matmul` 4096 at about 787 ms. This is
+  the check that the extra load is gone; if it fails, the run says
+  nothing about the fix either.
+- RSD median at or below Run 1's 21%.
+- `matmul` 4096 at about 20.9 ms on both GPU libraries, within 5%.
+- PyTorch `matmul` 256 events within 30% of CuPy's.
+- CuPy `matmul` 2048 events still above the synchronized timer: the
+  warm-up is still counted in calls.
