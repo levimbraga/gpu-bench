@@ -8,14 +8,36 @@ CUDA version, CPU, Python, OS — so any number here can be traced and reproduce
 
 ## Results
 
-No results yet. The first numbers arrive with phase 1, the timing harness.
+Phase 1 timed four operations with NumPy on the CPU and CuPy and PyTorch on
+the GPU, on both machines. All 270 results passed a correctness check
+against a float64 reference. Medians of 30 repetitions, GPU times from CUDA
+events; the full write-up is in [docs/phase-1-timing.md](docs/phase-1-timing.md).
+
+| Largest size | RTX 2060 | Tesla T4 |
+|---|---:|---:|
+| `matmul` 4096 × 4096, NumPy (CPU) | 787 ms · 175 GFLOP/s | 1,164 ms · 118 GFLOP/s |
+| `matmul` 4096 × 4096, PyTorch (GPU) | 20.9 ms · 6.6 TFLOP/s | 35.0 ms · 3.9 TFLOP/s |
+| `saxpy` 2²⁴ elements, NumPy (CPU) | 26.3 ms · 7.7 GB/s | 43.2 ms · 4.7 GB/s |
+| `saxpy` 2²⁴ elements, PyTorch (GPU) | 1.23 ms · 164 GB/s | 1.42 ms · 142 GB/s |
+
+CuPy and PyTorch tied on `matmul` (both call cuBLAS). Each GPU is compared
+only with the CPU of its own machine: the two CPUs are very different chips.
+
+![matmul throughput by library](docs/img/matmul.png)
+
+**The main finding: timing a GPU call without synchronizing measures the
+launch, not the work.** On PyTorch `matmul` 4096, a CPU timer without
+`synchronize` reported 0.22 ms on the RTX 2060 and 0.06 ms on the T4,
+against 20.9 and 35.0 ms with CUDA events: errors of about 94× and 560×.
+
+![PyTorch matmul time by clock](docs/img/timers.png)
 
 ## Roadmap
 
 | Phase | Question it answers | Status |
 |---|---|---|
 | 0 | Where do the numbers come from? (environments, repository) | [done](docs/phase-0-environments.md) |
-| 1 | How fast is the same operation on CPU and GPU, timed correctly? | not yet |
+| 1 | How fast is the same operation on CPU and GPU, timed correctly? | [done](docs/phase-1-timing.md) |
 | 2 | What is the GPU doing while it runs? (telemetry) | not yet |
 | 3 | How fast does a real model run inference? | not yet |
 | 4 | How close can a hand-written CUDA C kernel get to cuBLAS? | not yet |
@@ -42,6 +64,18 @@ same architecture, not across generations.
   records the GPU it actually ran on.
 - **Multi-GPU machines are not fully described**: the environment stamp
   records the first GPU that `nvidia-smi` lists and only counts the others.
+- **Warm-up is a fixed number of calls (20)**, but the GPU needs *time* to
+  raise its clock after being idle: after seconds of CPU-only work, 20 calls
+  were not enough (see phase 1). A time-based warm-up is not implemented yet.
+- **The RTX 2060's results are noisier** (RSD above 50% in many rows, against
+  under 10% on the T4), probably from the display and WSL2; not isolated yet.
+- **The CUDA libraries installed by pip are 13.0** (PyTorch is built for
+  CUDA 13.0), while the desktop's `nvcc` is 13.4: the `cuda_toolkit` field
+  records the compiler, not the libraries the Python benchmarks ran on.
+- **Host-to-device copies come from ordinary (pageable) memory**; pinned
+  memory is not measured yet.
+- **Some results are not explained yet**, and are listed as such in the
+  phase 1 write-up.
 
 ## License
 
