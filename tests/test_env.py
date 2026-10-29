@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the environment stamp."""
 
+from pathlib import Path
+
 from bench.env import _run, collect_environment
 
 EXPECTED_FIELDS = {
@@ -37,3 +39,19 @@ def test_run_reports_a_missing_command() -> None:
 
 def test_run_reports_a_failing_command() -> None:
     assert _run(["false"]) == (None, "false exited with code 1")
+
+
+def test_run_reports_a_command_that_cannot_run(tmp_path: Path) -> None:
+    # Exists, but is not executable: the OS refuses to run it.
+    script = tmp_path / "not-executable"
+    script.write_text("#!/bin/sh\necho hi\n")
+    output, reason = _run([str(script)])
+    assert output is None
+    assert reason is not None and "could not run" in reason
+
+
+def test_run_reports_output_that_is_not_text() -> None:
+    # printf writes the byte 0xff, which is not valid UTF-8.
+    output, reason = _run(["printf", "\\377"])
+    assert output is None
+    assert reason == "printf printed output that is not text"

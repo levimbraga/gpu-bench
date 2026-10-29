@@ -13,23 +13,31 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-# Libraries whose version can change a benchmark result.
-# cupy-cuda13x on the desktop, cupy-cuda12x on Colab; the other one reads
+# Libraries whose version can change a benchmark result. CuPy ships one
+# package per CUDA major version; whichever is not installed reads
 # "not installed".
 _LIBRARIES = ("numpy", "torch", "cupy-cuda13x", "cupy-cuda12x")
 
 
-def _run(command: list[str]) -> tuple[str | None, str | None]:
+def _run(command: list[str], cwd: Path | None = None) -> tuple[str | None, str | None]:
     """Run a command; return (output, None) on success, (None, reason) on failure.
 
-    Never raises: a missing, hung or failing command becomes a reason.
+    Never raises: a missing, hung, unrunnable or failing command, or one whose
+    output is not text, becomes a reason.
     """
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(
+            command, capture_output=True, text=True, timeout=5, cwd=cwd
+        )
     except FileNotFoundError:
         return None, f"{command[0]} not found"
     except subprocess.TimeoutExpired:
         return None, f"{command[0]} timed out"
+    except OSError as error:
+        # For example, a file that exists but is not executable.
+        return None, f"{command[0]} could not run: {error.strerror}"
+    except UnicodeDecodeError:
+        return None, f"{command[0]} printed output that is not text"
     if result.returncode != 0:
         return None, f"{command[0]} exited with code {result.returncode}"
     return result.stdout, None
