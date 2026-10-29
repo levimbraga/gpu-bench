@@ -265,3 +265,43 @@ VS Code, Spotify and Firefox closed, from a plain terminal.
 - PyTorch `matmul` 256 events within 30% of CuPy's.
 - CuPy `matmul` 2048 events still above the synchronized timer: the
   warm-up is still counted in calls.
+
+**What happened (2026-10-29 17:50 UTC, `results/20261029T175052Z_nvidia-geforce-rtx-2060.csv`, commit `cdb7ab0`):**
+
+All 135 rows passed the correctness check, and every expectation held.
+
+- NumPy `matmul` 4096: 796 ms against 787 ms in Run 1, within 5%: the
+  control passed, so the run counts.
+- RSD median 16.7%, below Run 1's 21%; 10 rows above 50% (Run 1: 22).
+- `matmul` 4096: 20.8 ms on CuPy and 21.0 ms on PyTorch, within 5% of
+  Run 1's 20.9 ms.
+- PyTorch `matmul` 256: 0.079 ms on events against CuPy's 0.096 ms, within
+  30% (Run 1: 0.214 against 0.093 ms).
+- CuPy `matmul` 2048: events 4.11 ms against 2.99 ms on the synchronized
+  timer, still above, as expected.
+
+**Not expected:** NumPy `matmul` at 512 and 1024 reached 170 and
+152 GFLOP/s, with RSD 21% and 8%: the drop to 33–82 GFLOP/s seen in Run 1
+did not reappear on a quiet machine.
+
+Runs 5 (RTX 2060) and 4 (T4) are the ones the write-up and the README use.
+
+## Corrections to earlier entries
+
+Entries above are kept as written; these correct them.
+
+- Check 2's paragraph was rewritten after Run 2 (`eaab5c3`), to drop a
+  claim about the card's theoretical peak. Checks 1 and 2 were short runs
+  whose CSVs were not saved: their numbers cannot be traced to a file.
+- Run 1: PyTorch `matmul` 256's RSD ranged 30–303%, not 35–303%.
+- Run 1: the `saxpy` 2¹⁶ GPU time of ~0.07 ms was CuPy's; PyTorch's was
+  0.164 ms.
+- Run 1: "close at the smallest sizes" held for CuPy (0.062 against
+  0.068 ms); PyTorch's unsynchronized timer read 3.4× below its events at
+  `matmul` 256.
+- Run 2's expectation gave the RTX 2060's power limit as 170 W, from
+  memory and not checked.
+- Run 2: "almost every RSD under 10%" on the T4 was wrong: 74 of 135 rows,
+  with a median of 7.9%. The RTX 2060's rows above 50% were 22 of 135.
+- Run 2: the synchronized timer closer to the events on the T4 held for
+  CuPy only; on the RTX 2060, PyTorch read 0.616 against 0.642 ms.

@@ -9,7 +9,9 @@ CUDA versions or CPUs. So every result in this repository will carry an
 ## The three environments
 
 Each column below is the output of the same file, unchanged, on a
-different machine, on 2026-10-26 (UTC):
+different machine, on 2026-10-26 (UTC). The stamp has gained fields since
+(the CuPy version and `git_commit`); this table shows it as it was then,
+at commit `e3961cd`:
 
 | Field | Desktop (main) | Google Colab | Laptop (no NVIDIA GPU) |
 |---|---|---|---|
