@@ -108,6 +108,17 @@ All 150 rows passed the correctness check. Medians of 30 repetitions after
 
 **Expectation (written before running):**
 
-- compared with the RTX 2060: ___
+- matmul 4096: the T4 slower than the RTX 2060, around 4–6 TFLOP/s against
+  6.6, even though it has more cores on paper (2,560 against 1,920),
+  because the T4 is capped at 70 W against the 2060's 170 W and has to keep
+  its clock low under sustained load.
+- saxpy 2^24: about the same bandwidth as the RTX 2060 (~150–170 GB/s),
+  because the two cards have similar memory bandwidth on paper (320 against
+  336 GB/s), and SAXPY is limited by memory.
+- NumPy: slower than on the desktop, because a free Colab VM gives only a
+  couple of shared CPU threads.
+- the synchronized timer closer to CUDA events than on the desktop, if the
+  extra ~0.17 ms seen at matmul 1024 came from synchronizing through WSL2;
+  Colab runs native Linux.
 
 **What happened:**
