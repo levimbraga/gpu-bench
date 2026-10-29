@@ -250,6 +250,9 @@ to within 1% (796 ms), so it counts.
   the same as the events (11.2 against 11.1 ms on the RTX 2060), so the
   copy returned only when done; on CuPy it read far less (5.8 against
   16.8 ms).
+- **CuPy `sum` 2²⁰ on the RTX 2060 in Run 5:** 0.281 ms on events (RSD 70%)
+  against 0.075 ms on the synchronized timer, which counts more work: a
+  noisy reading the chart shows as a dip.
 - **Host-to-device copies reached only 3.7–6.1 GB/s at 2²⁴.** The copies come
   from ordinary (pageable) CPU memory; pinned memory is not measured yet.
 
