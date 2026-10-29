@@ -10,8 +10,15 @@ import numpy.typing as npt
 import pytest
 
 from bench.__main__ import main
-from bench.backends import Array, Call, FloatArray, NumpyBackend, _GpuBackend
-from bench.harness import measure, summarize
+from bench.backends import (
+    BACKENDS,
+    Array,
+    Call,
+    FloatArray,
+    NumpyBackend,
+    _GpuBackend,
+)
+from bench.harness import _per_second, measure, summarize
 from bench.ops import MATMUL, OPERATIONS, SAXPY, relative_error
 from bench.table import load, render
 
@@ -95,6 +102,77 @@ def test_gpu_backends_produce_one_row_per_clock() -> None:
     assert backend.synchronize_calls > 0
 
 
+class _SlowDevice(_FakeGpuBackend):
+    """A device whose synchronize takes 20 ms, like a GPU still busy."""
+
+    def synchronize(self) -> None:
+        super().synchronize()
+        time.sleep(0.02)
+
+
+def test_only_the_synced_timer_counts_the_wait() -> None:
+    backend = _SlowDevice()
+
+    def call() -> None:
+        return None
+
+    before = backend.synchronize_calls
+    synced = backend._synced_cpu_timer_ms(call)
+    # One wait before starting the clock, one before stopping it.
+    assert backend.synchronize_calls - before == 2
+    # The closing wait (20 ms) is inside the synced timer, and outside the
+    # unsynced one, which stops as soon as the call returns.
+    unsynced = backend._unsynced_cpu_timer_ms(call)
+    assert synced >= 20
+    assert unsynced < 20
+
+
+def test_throughput_from_a_known_time() -> None:
+    # 12 GB in one second is 12 GB/s.
+    assert _per_second(12e9, 1000.0) == pytest.approx(12.0)
+    assert _per_second(None, 1000.0) is None
+    host = SAXPY.make_inputs(32, np.random.default_rng(0))
+    (row,) = measure(
+        NumpyBackend(), SAXPY, 32, host, SAXPY.reference(host), 2, warmup=0
+    )
+    moved = SAXPY.bytes_moved(32)
+    assert moved is not None
+    assert row.gbps == pytest.approx(moved / (row.median_ms / 1000) / 1e9)
+
+
+class _WrongNumpy(NumpyBackend):
+    """Returns every result off by one, so the correctness check must fail."""
+
+    def to_numpy(self, x: Array) -> npt.NDArray[Any]:
+        return np.asarray(x) + 1.0
+
+
+def test_a_wrong_result_is_recorded_and_fails_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(BACKENDS, "numpy", _WrongNumpy)
+    status = main(
+        [
+            "run",
+            "--ops",
+            "saxpy",
+            "--backends",
+            "numpy",
+            "--sizes",
+            "64",
+            "--reps",
+            "2",
+            "--warmup",
+            "0",
+            "--out",
+            str(tmp_path),
+        ]
+    )
+    assert status == 1
+    (csv_path,) = tmp_path.iterdir()
+    assert {row["correct"] for row in load(csv_path)} == {"False"}
+
+
 def test_transfer_is_measured_only_on_gpu_backends(tmp_path: Path) -> None:
     status = main(
         ["run", "--ops", "h2d", "--backends", "numpy", "--out", str(tmp_path)]
@@ -127,6 +205,7 @@ def test_run_writes_a_csv_that_renders(tmp_path: Path) -> None:
     assert {row["op"] for row in rows} == {"saxpy"}
     # Every row carries the environment stamp and the knobs.
     assert all(row["gpu"] and row["dtype"] == "float32" for row in rows)
+    assert all(row["seed"] == "0" and row["git_commit"] for row in rows)
     table = render(rows)
     assert "### saxpy" in table
 
