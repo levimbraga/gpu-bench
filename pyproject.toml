@@ -1,7 +1,7 @@
 [project]
 name = "gpu-bench"
 version = "0.1.0"
-description = "GPU performance benchmarks in Python and CUDA C."
+description = "GPU performance benchmarks: NumPy, CuPy and PyTorch, timed correctly."
 readme = "README.md"
 license = "Apache-2.0"
 # Colab runs 3.13; the desktop is pinned to 3.13 too, so both sides match.

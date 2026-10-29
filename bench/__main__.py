@@ -17,10 +17,10 @@ from bench.harness import Result, knobs, measure, write_csv
 from bench.ops import OPERATIONS
 from bench.table import load, render
 
-# Measured on the RTX 2060: with 2 warm-up calls, CUDA events (the first
-# clock to run) read 27% slower than the synchronized timer on a 1024
-# matmul, because the GPU was still raising its clock; with 20, the gap was
-# 2%. See docs/phase-1-notes.md.
+# Measured on the RTX 2060, in a short check whose CSV was not saved: with 2
+# warm-up calls, CUDA events (the first clock to run) read 27% slower than
+# the synchronized timer on a 1024 matmul; with 20, the gap was 2%. The GPU
+# was probably still raising its clock. See docs/phase-1-notes.md.
 DEFAULT_WARMUP = 20
 
 
@@ -96,8 +96,9 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     # Collected once, at the start, and written on every row.
-    # The seed is recorded too: with it and the commit, the inputs can be
-    # generated again exactly.
+    # The seed is recorded too: with it, the commit, the same NumPy and the
+    # same --ops and --sizes (one generator is used in that order), the
+    # inputs can be generated again exactly.
     stamp = collect_environment() | knobs(backends) | {"seed": str(args.seed)}
     rng = np.random.default_rng(args.seed)
     rows: list[Result] = []

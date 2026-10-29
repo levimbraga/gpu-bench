@@ -35,4 +35,6 @@ build/
 
 # Windows download marker, shows up when copying files into WSL
 *:Zone.Identifier
+
+# Raw output of scripts/colab_run.py; its CSV is saved in results/
 colab-output.txt

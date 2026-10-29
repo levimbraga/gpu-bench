@@ -30,7 +30,14 @@ def _run(command: list[str], cwd: Path | None = None) -> tuple[str | None, str |
     """
     try:
         result = subprocess.run(
-            command, capture_output=True, text=True, timeout=5, cwd=cwd
+            command,
+            capture_output=True,
+            text=True,
+            # Fixed, not the locale's: the same bytes decode the same way on
+            # every machine.
+            encoding="utf-8",
+            timeout=5,
+            cwd=cwd,
         )
     except FileNotFoundError:
         return None, f"{command[0]} not found"
@@ -115,7 +122,7 @@ def _cpu() -> str:
     """
     try:
         text = Path("/proc/cpuinfo").read_text()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return "not recorded: cannot read /proc/cpuinfo"
     for line in text.splitlines():
         if line.startswith("model name"):
@@ -135,7 +142,7 @@ def _os() -> str:
     """
     try:
         text = Path("/etc/os-release").read_text()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return "not recorded: cannot read /etc/os-release"
     for line in text.splitlines():
         if line.startswith("PRETTY_NAME="):
@@ -150,7 +157,7 @@ def _is_wsl() -> str:
     """
     try:
         text = Path("/proc/version").read_text()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return "not recorded: cannot read /proc/version"
     return "yes" if "microsoft" in text.lower() else "no"
 
@@ -189,6 +196,14 @@ def _git_commit() -> str:
     from edited code is never mistaken for one from the commit. Never raises:
     outside a git checkout, returns the reason instead.
     """
+    # git looks upward for a repository; if this code were copied into some
+    # other repository, it would stamp that one's commit. Only accept a
+    # repository whose root is this one.
+    top, reason = _run(["git", "rev-parse", "--show-toplevel"], cwd=_REPOSITORY)
+    if top is None:
+        return f"not recorded: {reason or 'no output'}"
+    if Path(top.strip()).resolve() != _REPOSITORY:
+        return "not recorded: the code is not at the root of its git repository"
     output, reason = _run(["git", "rev-parse", "HEAD"], cwd=_REPOSITORY)
     if output is None:
         return f"not recorded: {reason or 'no output'}"

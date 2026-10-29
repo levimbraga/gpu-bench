@@ -166,11 +166,18 @@ class TorchBackend(_GpuBackend):
         # per call, the end event would be created inside the timed region,
         # and its creation time counted whenever the GPU finishes first. One
         # pair, created here and recorded once, is reused by every timed call.
-        self._start = self._torch.cuda.Event(enable_timing=True)
-        self._end = self._torch.cuda.Event(enable_timing=True)
-        self._start.record()
-        self._end.record()
-        self._end.synchronize()
+        try:
+            self._start = self._torch.cuda.Event(enable_timing=True)
+            self._end = self._torch.cuda.Event(enable_timing=True)
+            self._start.record()
+            self._end.record()
+            self._end.synchronize()
+        except RuntimeError as error:
+            # The first real CUDA work: a broken driver or a GPU in a bad
+            # state fails here, and means this backend cannot run.
+            raise BackendUnavailableError(
+                f"torch cannot use the GPU: {error}"
+            ) from error
 
     def asarray(self, host: FloatArray) -> Array:
         return self._torch.from_numpy(host).to(self._device)
