@@ -16,6 +16,8 @@ EXPECTED_FIELDS = {
     "is_cloud",
     "numpy",
     "torch",
+    "cupy-cuda13x",
+    "cupy-cuda12x",
     "timestamp",
 }
 

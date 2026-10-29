@@ -14,7 +14,9 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 # Libraries whose version can change a benchmark result.
-_LIBRARIES = ("numpy", "torch")
+# cupy-cuda13x on the desktop, cupy-cuda12x on Colab; the other one reads
+# "not installed".
+_LIBRARIES = ("numpy", "torch", "cupy-cuda13x", "cupy-cuda12x")
 
 
 def _run(command: list[str]) -> tuple[str | None, str | None]:
