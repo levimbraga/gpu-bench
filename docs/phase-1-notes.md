@@ -41,8 +41,9 @@ short for the GPU to reach its clock.
 
 **What happened (2026-10-29 UTC):** at 1024, CUDA events measured 0.56 ms
 (CuPy) and 0.58 ms (PyTorch) against 13.61 ms for NumPy, about 24×. The
-unsynchronized timer reported ~11,500 GFLOP/s, above the card's theoretical
-FP32 peak, which proves it measured the launch. The synchronized timer read
+unsynchronized timer reported ~11,500 GFLOP/s, almost twice the most the
+card ever measured with events (6.6 TFLOP/s, Run 1), which proves it
+measured the launch. The synchronized timer read
 ~0.17 ms above the events at 1024, likely the cost of the synchronize calls
 themselves. At 256, the spread was 13–56% with only 5 repetitions.
 
@@ -75,7 +76,7 @@ themselves. At 256, the spread was 13–56% with only 5 repetitions.
 
 **What happened (2026-10-29 13:49 UTC, `results/20261029T135052Z_nvidia-geforce-rtx-2060.csv`):**
 
-All 150 rows passed the correctness check. Medians of 30 repetitions after
+All 135 rows passed the correctness check. Medians of 30 repetitions after
 20 warm-up calls; GPU times from CUDA events.
 
 - matmul 256: CuPy 0.093 ms against NumPy 0.198 ms, about 2.1×, as
@@ -121,4 +122,32 @@ All 150 rows passed the correctness check. Medians of 30 repetitions after
   extra ~0.17 ms seen at matmul 1024 came from synchronizing through WSL2;
   Colab runs native Linux.
 
-**What happened:**
+**What happened (2026-10-29 14:16 UTC, `results/20261029T141820Z_tesla-t4.csv`):**
+
+All 135 rows passed the correctness check. Medians of 30 repetitions after
+20 warm-up calls; GPU times from CUDA events.
+
+- matmul 4096: 34.7 ms on CuPy and 35.0 ms on PyTorch, 3.9 TFLOP/s, against
+  6.6 TFLOP/s on the RTX 2060: slower, as expected, and a little below the
+  4–6 expected.
+- saxpy 2^24: 146 GB/s on CuPy and 142 GB/s on PyTorch, against 164 GB/s on
+  the RTX 2060: about the same, as expected.
+- NumPy: slower than on the desktop, as expected (matmul 4096 in 1,164 ms
+  against 787 ms).
+- the synchronized timer stayed close to CUDA events: 0.877 against
+  0.880 ms on CuPy matmul 1024, where the desktop read 0.923 against
+  0.735 ms. This supports the WSL2 explanation, but does not prove it: the
+  GPU is different too.
+
+**Not expected:**
+
+- The T4 was far more stable: almost every RSD under 10%, where the RTX 2060
+  went above 50% in many rows. The 2060 shares the card with the display
+  and runs under WSL2; the T4 has neither.
+- Smaller fixed cost per GPU call: saxpy 2^16 took ~0.034 ms on the T4
+  against ~0.07 ms on the RTX 2060, enough for the GPU to tie with NumPy at
+  that size.
+- At matmul 4096, the unsynchronized timer implied 2,203 TFLOP/s against
+  the 3.9 TFLOP/s measured with events: an error of about 560×.
+- On PyTorch matmul 1024, the synchronized timer (0.537 ms) read below the
+  events (0.866 ms). Cause not known yet.
