@@ -151,3 +151,51 @@ All 135 rows passed the correctness check. Medians of 30 repetitions after
   the 3.9 TFLOP/s measured with events: an error of about 560×.
 - On PyTorch matmul 1024, the synchronized timer (0.537 ms) read below the
   events (0.866 ms). Cause not known yet.
+## The audit
+
+An independent review of the repository (2026-10-29) checked every number
+in the docs against the CSVs and every claim against the code. It found,
+among other things, a bug in the reference clock: PyTorch creates a CUDA
+event lazily, on its first `record()`, so the end event was created inside
+the timed region, and its creation time was counted whenever the GPU
+finished first. The synchronized timer brackets the events plus two
+synchronize calls, so it should never read below them; on PyTorch it did in
+11 of 20 (operation, size) pairs on each machine, against 2 (RTX 2060) and
+5 (T4) on CuPy, which creates its events up front.
+
+Fixed in code before runs 3 and 4 (`d443e23` to `0bdc633`): one PyTorch
+event pair created outside the timed region; the float64 reference computed
+once per size, before any backend runs; the git commit and the seed
+recorded on every row; plus tests and the stamp's fail-open paths. Runs 1
+and 2 stay in `results/` as the before.
+
+### Run 3 — RTX 2060, all operations, default sizes, after the fixes
+
+**Expectation (written before running):**
+
+- PyTorch: the synchronized timer reads below the events in at most 5 of
+  20 (operation, size) pairs, about CuPy's level in Run 1, down from 11.
+  Not zero: on this card, noise alone can flip two close readings.
+- PyTorch at the smallest sizes: events closer to CuPy's than in Run 1,
+  for example `matmul` 256 within 30% of CuPy (Run 1: 0.214 against
+  0.093 ms).
+- The largest sizes unchanged within 5%: `matmul` 4096 at about 20.9 ms
+  (6.6 TFLOP/s) on both GPU libraries, since an event created once per
+  call is negligible next to 20 ms of work.
+- CuPy `matmul` 2048 events still above the synchronized timer, as in
+  Run 1: the fix removed the reference computation, but NumPy still runs
+  about 5 s on the same size right before CuPy, with the GPU idle. Only a
+  time-based warm-up would fix that, and it is not implemented.
+- `git_commit` on every row equal to the commit that adds these
+  expectations, without `+dirty`.
+
+### Run 4 — Colab T4, same command, after the fixes
+
+**Expectation (written before running):**
+
+- PyTorch: the synchronized timer reads below the events in at most 5 of
+  20 pairs, down from 11.
+- PyTorch `matmul` 1024: events and synchronized timer within 10% of each
+  other (Run 2: 0.866 against 0.537 ms).
+- `matmul` 4096 unchanged within 5%: about 35 ms, 3.9 TFLOP/s.
+- RSD as low as in Run 2: a median around 8%.
