@@ -18,6 +18,9 @@ from pathlib import Path
 # "not installed".
 _LIBRARIES = ("numpy", "torch", "cupy-cuda13x", "cupy-cuda12x")
 
+# The repository root: this file lives in bench/, one level below it.
+_REPOSITORY = Path(__file__).resolve().parent.parent
+
 
 def _run(command: list[str], cwd: Path | None = None) -> tuple[str | None, str | None]:
     """Run a command; return (output, None) on success, (None, reason) on failure.
@@ -179,6 +182,25 @@ def _libraries() -> dict[str, str]:
     return versions
 
 
+def _git_commit() -> str:
+    """Return the commit the benchmark code ran from, e.g. "4545630...".
+
+    Ends in "+dirty" when tracked files had uncommitted changes, so a result
+    from edited code is never mistaken for one from the commit. Never raises:
+    outside a git checkout, returns the reason instead.
+    """
+    output, reason = _run(["git", "rev-parse", "HEAD"], cwd=_REPOSITORY)
+    if output is None:
+        return f"not recorded: {reason or 'no output'}"
+    commit = output.strip()
+    status, _ = _run(
+        ["git", "status", "--porcelain", "--untracked-files=no"], cwd=_REPOSITORY
+    )
+    if status is None:
+        return f"{commit} (uncommitted changes not checked)"
+    return f"{commit}+dirty" if status.strip() else commit
+
+
 def _timestamp() -> str:
     """Return the current time in UTC, ISO 8601, to the second."""
     return datetime.now(UTC).isoformat(timespec="seconds")
@@ -199,6 +221,7 @@ def collect_environment() -> dict[str, str]:
         "is_wsl": _is_wsl(),
         "is_cloud": _is_cloud(),
         **_libraries(),
+        "git_commit": _git_commit(),
         "timestamp": _timestamp(),
     }
 

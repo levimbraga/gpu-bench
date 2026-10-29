@@ -20,6 +20,7 @@ EXPECTED_FIELDS = {
     "torch",
     "cupy-cuda13x",
     "cupy-cuda12x",
+    "git_commit",
     "timestamp",
 }
 

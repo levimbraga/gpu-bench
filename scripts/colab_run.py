@@ -21,7 +21,11 @@ WORKDIR = Path("/content/gpu-bench")
 
 def main(args: list[str]) -> int:
     """Clone, run the harness, and print every CSV it wrote."""
-    if not WORKDIR.exists():
+    if WORKDIR.exists():
+        # A VM reused from an earlier run: bring its clone up to date, so the
+        # run never measures stale code. The stamp records the exact commit.
+        subprocess.run(["git", "-C", str(WORKDIR), "pull", "--ff-only"], check=True)
+    else:
         subprocess.run(
             ["git", "clone", "--depth", "1", REPOSITORY, str(WORKDIR)], check=True
         )
@@ -49,3 +53,4 @@ if __name__ == "__main__":
     status = main(sys.argv[1:])
     if status != 0:
         print(f"bench exited with code {status}")
+    sys.exit(status)

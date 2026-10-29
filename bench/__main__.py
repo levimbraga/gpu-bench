@@ -96,7 +96,9 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     # Collected once, at the start, and written on every row.
-    stamp = collect_environment() | knobs(backends)
+    # The seed is recorded too: with it and the commit, the inputs can be
+    # generated again exactly.
+    stamp = collect_environment() | knobs(backends) | {"seed": str(args.seed)}
     rng = np.random.default_rng(args.seed)
     rows: list[Result] = []
     for op_name in args.ops:
