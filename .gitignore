@@ -35,3 +35,4 @@ build/
 
 # Windows download marker, shows up when copying files into WSL
 *:Zone.Identifier
+colab-output.txt
