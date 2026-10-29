@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
 from bench.backends import Backend, FloatArray, TorchBackend
 from bench.ops import DTYPE, Operation, relative_error
@@ -70,13 +71,17 @@ def measure(
     op: Operation,
     size: int,
     host: list[FloatArray],
+    expected: npt.NDArray[np.float64],
     repetitions: int,
     warmup: int,
 ) -> list[Result]:
     """Check one operation on one backend, then time it with every clock.
 
-    The host inputs come from the caller, so every backend is measured on
-    the same data.
+    The host inputs and the float64 reference (`expected`) come from the
+    caller: every backend is measured on the same data, and the reference,
+    which takes seconds on the CPU for a large matmul, is computed once
+    instead of between the first call and the timing, where it would leave
+    the GPU idle right before it is timed.
     """
     # Inputs go to the device before any timing: the transfer is measured on
     # its own, as the h2d operation.
@@ -90,7 +95,7 @@ def measure(
     # (library handles, kernel loading) outside every timed region.
     result = call()
     backend.synchronize()
-    error = relative_error(backend.to_numpy(result), op.reference(host))
+    error = relative_error(backend.to_numpy(result), expected)
     correct = error <= op.tolerance
 
     rows = []

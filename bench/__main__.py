@@ -103,13 +103,17 @@ def _run(args: argparse.Namespace) -> int:
         op = OPERATIONS[op_name]
         for size in args.sizes or op.default_sizes:
             # One set of inputs per (operation, size), shared by every
-            # backend: the comparison runs on the same data.
+            # backend: the comparison runs on the same data. The float64
+            # reference is computed here, once, before any backend runs.
             host = op.make_inputs(size, rng)
+            expected = op.reference(host)
             for backend in backends:
                 if op.gpu_only and backend.name == "numpy":
                     continue
                 print(f"{op.name} {backend.name} {size}", file=sys.stderr)
-                rows += measure(backend, op, size, host, args.reps, args.warmup)
+                rows += measure(
+                    backend, op, size, host, expected, args.reps, args.warmup
+                )
 
     if not rows:
         print("nothing was measured (h2d needs a GPU backend)", file=sys.stderr)

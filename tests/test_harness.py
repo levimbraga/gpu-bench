@@ -20,7 +20,9 @@ from bench.table import load, render
 def test_numpy_results_pass_their_own_check(name: str) -> None:
     op = OPERATIONS[name]
     host = op.make_inputs(64, np.random.default_rng(0))
-    rows = measure(NumpyBackend(), op, 64, host, repetitions=3, warmup=1)
+    rows = measure(
+        NumpyBackend(), op, 64, host, op.reference(host), repetitions=3, warmup=1
+    )
     assert rows and all(row.correct for row in rows)
 
 
@@ -80,7 +82,9 @@ class _FakeGpuBackend(_GpuBackend):
 def test_gpu_backends_produce_one_row_per_clock() -> None:
     backend = _FakeGpuBackend()
     host = SAXPY.make_inputs(32, np.random.default_rng(0))
-    rows = measure(backend, SAXPY, 32, host, repetitions=2, warmup=1)
+    rows = measure(
+        backend, SAXPY, 32, host, SAXPY.reference(host), repetitions=2, warmup=1
+    )
     assert [row.method for row in rows] == [
         "cuda_events",
         "synced_cpu_timer",
