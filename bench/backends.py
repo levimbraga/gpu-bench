@@ -162,6 +162,15 @@ class TorchBackend(_GpuBackend):
         if not self._torch.cuda.is_available():
             raise BackendUnavailableError("torch sees no CUDA device")
         self._device = self._torch.device("cuda")
+        # PyTorch creates a CUDA event lazily, on its first record(). Created
+        # per call, the end event would be created inside the timed region,
+        # and its creation time counted whenever the GPU finishes first. One
+        # pair, created here and recorded once, is reused by every timed call.
+        self._start = self._torch.cuda.Event(enable_timing=True)
+        self._end = self._torch.cuda.Event(enable_timing=True)
+        self._start.record()
+        self._end.record()
+        self._end.synchronize()
 
     def asarray(self, host: FloatArray) -> Array:
         return self._torch.from_numpy(host).to(self._device)
@@ -174,13 +183,11 @@ class TorchBackend(_GpuBackend):
 
     def _events_ms(self, fn: Call) -> float:
         # Same idea as CuPy: markers in the GPU's queue, timed by the GPU.
-        start = self._torch.cuda.Event(enable_timing=True)
-        end = self._torch.cuda.Event(enable_timing=True)
-        start.record()
+        self._start.record()
         fn()
-        end.record()
-        end.synchronize()
-        return float(start.elapsed_time(end))
+        self._end.record()
+        self._end.synchronize()
+        return float(self._start.elapsed_time(self._end))
 
     def float32_matmul_precision(self) -> str:
         """PyTorch's matmul precision setting, which can change float32 results."""
