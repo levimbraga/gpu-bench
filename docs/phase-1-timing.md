@@ -30,6 +30,9 @@ data-center card of the same architecture.
   - **CUDA events**, the reference: two markers placed in the GPU's own
     queue, around the call; the GPU records the time when it reaches each
     one. One pair is created per backend, before any timing, and reused.
+    When the GPU finishes a tiny call before Python has queued the end
+    marker, the GPU waits in between, so the events then include that
+    host-side time too.
   - **A CPU timer with synchronization** before starting and before
     stopping the clock: correct, but it also counts the cost of
     synchronizing.
@@ -47,10 +50,13 @@ data-center card of the same architecture.
   git commit the code ran from (marked `+dirty` if it had uncommitted
   changes), the seed of the inputs, the BLAS NumPy uses, the thread-count
   environment variables, and PyTorch's float32 matmul precision.
-- **Tested without a GPU:** [`tests/test_harness.py`](../tests/test_harness.py)
-  uses a fake GPU backend to check that the synchronized timer counts the
-  wait and the unsynchronized one does not, and checks the statistics, the
-  throughput math, a failing correctness check and the CSV.
+- **Tested without a GPU:** [`tests/`](../tests/) use fake GPU backends and
+  a stand-in for PyTorch to check that the synchronized timer counts the
+  wait and the unsynchronized one does not, that PyTorch's events are not
+  created inside a timed call, that warm-up calls run, that the reference
+  is not recomputed, the median and RSD, the throughput math, a failing
+  correctness check, the seed, and the `+dirty` marker. The charts are not
+  tested.
 
 ## Results
 
@@ -108,9 +114,11 @@ How to read these numbers:
   memory from a pool. Part of the `saxpy`
   ratio is that allocation, not arithmetic; how much was not measured on
   these machines.
-- **A T4 number holds to about 12%:** two Colab sessions on the same T4
-  model, with the same CuPy code, measured `matmul` 4096 at 34.7 ms
-  (Run 2) and 30.7 ms (Run 4).
+- **T4 numbers are uncertain by at least 12%:** two Colab sessions on the
+  same T4 model measured CuPy `matmul` 4096 at 34.7 ms (Run 2) and 30.7 ms
+  (Run 4). The harness changed between them (the reference moved before
+  the timing), so session and harness are not separated; on the RTX 2060,
+  the same change moved that number by under 1%.
 - **CuPy and PyTorch tie on `matmul` at 4096** (both call cuBLAS), but not
   at every size: at 2048 on the RTX 2060, CuPy read 4.11 ms against
   PyTorch's 2.83 ms, for the warm-up reason below.
@@ -128,10 +136,11 @@ Without synchronization, the CPU timer stops when the call has been
 | Tesla T4 | 31.2 ms | 0.07 ms | 1,872 TFLOP/s | ~425× |
 
 Both "results" are impossible: about 100× and 425× what each card measured
-with events. At the smallest sizes the two clocks read close (on `saxpy`
-2¹⁶ on the RTX 2060: CuPy 0.063 ms against 0.062 ms; PyTorch 0.109 ms
-against 0.054 ms), because launching is most of the cost there — which is
-exactly what makes the mistake easy to miss when testing with small inputs.
+with events. At the smallest sizes the gap shrinks, because launching is
+most of the cost there (on `saxpy` 2¹⁶ on the RTX 2060: close on CuPy,
+0.063 against 0.062 ms; 2× apart on PyTorch, 0.109 against 0.054 ms) —
+which is what makes the mistake easy to miss when testing with small
+inputs.
 
 ## The audit, and what it changed
 
@@ -153,14 +162,26 @@ What the fix changed, on PyTorch's CUDA events:
 | | Before (Runs 1 and 2) | After (Runs 5 and 4) |
 |---|---:|---:|
 | RTX 2060, `matmul` 256 | 0.214 ms (CuPy: 0.093) | 0.079 ms (CuPy: 0.096) |
-| T4, `matmul` 1024, events vs synchronized timer | 0.866 vs 0.537 ms | 0.529 vs 0.528 ms |
+| T4, `matmul` 1024, events vs synchronized timer | 0.866 vs 0.537 ms | 0.529 vs 0.527 ms |
+| Median of events minus synchronized timer, RTX 2060 | 4.1 µs | 0.4 µs |
+| Median of events minus synchronized timer, T4 | 2.5 µs | 0.8 µs |
 
-The large sizes did not move beyond the run-to-run noise, so the headline
-numbers of the first runs held. Runs 1 and 2 stay in `results/` as the
-before. Run 3, the first run on the RTX 2060 after the fix, was discarded:
-other programs were open, NumPy ran 16% slower than in Run 1, and the noise
-was larger than the effect being measured. Run 5 repeated it with nothing
-else open, and its control (NumPy back to within 5% of Run 1) passed.
+The count of (operation, size) pairs where the synchronized timer read
+below the events stayed at 11 of 20 on PyTorch on both machines: at the
+smallest sizes the two clocks differ by microseconds of host-side work,
+and which one reads higher is not a rule. The medians above are the better
+measure.
+
+On the RTX 2060, the large sizes did not move beyond the run-to-run noise
+(`matmul` 4096: 20.9 ms before, 21.0 ms after). The T4's moved 12% (3.9 to
+4.4 TFLOP/s), within what two T4 sessions can differ. Runs 1 and 2 stay in
+`results/` as the before.
+
+Run 3, the first run on the RTX 2060 after the fix, was discarded: VS Code,
+Spotify and a browser were open, and NumPy `matmul` 4096, whose code did
+not change, took 29% longer than in Run 1 (1,016 against 787 ms). Run 5
+repeated it with nothing else open, and on the same measure NumPy came back
+to within 1% (796 ms), so it counts.
 
 ## Decisions
 
@@ -186,33 +207,37 @@ else open, and its control (NumPy back to within 5% of Run 1) passed.
 
 ## Found along the way
 
-- **Warm-up is a matter of time, not of calls.** In a short check before
-  the first full run (not saved as a CSV), CUDA events read 27% slower than
-  the synchronized timer on a 1024 matmul on the RTX 2060 with 2 warm-up
-  calls, and 2% with 20. In every full run, CuPy `matmul` 2048 comes right
-  after seconds of NumPy on the same size with the GPU idle, and 20 calls
-  of about 3 ms were not enough: events against the synchronized timer read
-  4.11 against 2.99 ms (RTX 2060, Run 5) and 6.07 against 3.80 ms (T4,
-  Run 4).
+- **Warm-up may need time, not a number of calls (a hypothesis for
+  phase 2).** In a short check before the first full run (not saved as a
+  CSV), CUDA events read 27% slower than the synchronized timer on a 1024
+  matmul on the RTX 2060 with 2 warm-up calls, and 2% with 20. In the full
+  runs, CuPy `matmul` 2048 comes right after seconds of NumPy on the same
+  size, with the GPU idle, and its events read above the synchronized
+  timer in Runs 1, 4 and 5 (4.11 against 2.99 ms on the RTX 2060 in Run 5;
+  6.07 against 3.80 ms on the T4 in Run 4), by 4% in Run 3, and not at all
+  in Run 2. A GPU still raising its clock would explain it; the clock was
+  not measured, which is what phase 2 adds.
 - **The RTX 2060 exceeded its rated number:** 6.59 TFLOP/s measured,
   against 6.45 TFLOP/s computed from its rated boost clock
   (1,920 cores × 1.68 GHz × 2), which implies it ran above that clock. The
   clock itself was not measured; that is phase 2.
-- **The T4 was far more stable:** a median RSD of 6.7% (Run 4) against
-  16.7% on the RTX 2060 (Run 5), which also drives the display and runs
-  under WSL2.
-- **The fixed cost of a small GPU call was about half on the T4:**
-  `saxpy` 2¹⁶ took about 0.03 ms there against 0.06–0.11 ms on the
-  RTX 2060, enough for the T4 to beat NumPy at that size, where the 2060
-  lost to it.
+- **The T4 was far more stable:** a median RSD of 5.1% on the reference
+  clocks (Run 4) against 15.8% on the RTX 2060 (Run 5), which also drives
+  the display and runs under WSL2. Over all 135 rows: 6.7% and 16.7%.
+- **Small GPU calls were 2–3× faster on Colab:** `saxpy` 2¹⁶ took 0.031–
+  0.036 ms on the T4 against 0.063–0.109 ms on the RTX 2060. Most of that
+  time is host-side work (Python, the driver, and WSL2 on the desktop), on
+  two different CPUs, so the cause is not isolated.
 - **Memory-bound operations stayed below the memory's rated bandwidth:**
   `saxpy` reached about half (166 of 336 GB/s on the RTX 2060, 141 of
   320 GB/s on the T4), and `sum` 70–80%. The `saxpy` gap is consistent with
   `a*x + y` running as two kernels with a temporary array in between, which
   was not profiled.
-- **A busy desktop changes everything, NumPy included:** with VS Code,
-  Spotify and a browser open (Run 3), NumPy ran 16% slower and the median
-  RSD rose from 21% to 37%.
+- **Other programs on the desktop slowed some results, not all:** with
+  VS Code, Spotify and a browser open (Run 3), the median time against
+  Run 1 was 1.16× on NumPy and 1.09× on CuPy, but 1.01× on PyTorch, and
+  the median RSD rose from 21% to 37%. One uncontrolled run; the cause of
+  the difference between libraries is not known.
 
 ## Not explained yet
 
@@ -225,7 +250,7 @@ else open, and its control (NumPy back to within 5% of Run 1) passed.
   the same as the events (11.2 against 11.1 ms on the RTX 2060), so the
   copy returned only when done; on CuPy it read far less (5.8 against
   16.8 ms).
-- **Host-to-device copies reached only 3.7–6.1 GB/s.** The copies come
+- **Host-to-device copies reached only 3.7–6.1 GB/s at 2²⁴.** The copies come
   from ordinary (pageable) CPU memory; pinned memory is not measured yet.
 
 ## Reproducing

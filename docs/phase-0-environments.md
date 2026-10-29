@@ -11,7 +11,7 @@ CUDA versions or CPUs. So every result in this repository will carry an
 Each column below is the output of the same file, unchanged, on a
 different machine, on 2026-10-26 (UTC). The stamp has gained fields since
 (the CuPy version and `git_commit`); this table shows it as it was then,
-at commit `e3961cd`:
+at commit `e3961cd`, without its `timestamp` row:
 
 | Field | Desktop (main) | Google Colab | Laptop (no NVIDIA GPU) |
 |---|---|---|---|
@@ -43,7 +43,9 @@ and every field it could not read says why.
   package metadata for library versions, and the clock in UTC.
 - **Fail open:** a command that is missing, hangs (5-second timeout) or
   exits with an error becomes `"not recorded: <reason>"` instead of an
-  exception. A benchmark must never die because of its own label.
+  exception. A benchmark must never die because of its own label. Phase 1
+  extended this to a command that cannot run, output or a file that is not
+  text, and the git commit, read with `git` at the repository's root.
 - **Library versions are read from package metadata, not imported:**
   importing PyTorch takes seconds and loads its CUDA libraries, just to
   read a version number.

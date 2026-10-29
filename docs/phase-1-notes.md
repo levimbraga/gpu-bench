@@ -151,6 +151,7 @@ All 135 rows passed the correctness check. Medians of 30 repetitions after
   the 3.9 TFLOP/s measured with events: an error of about 560×.
 - On PyTorch matmul 1024, the synchronized timer (0.537 ms) read below the
   events (0.866 ms). Cause not known yet.
+
 ## The audit
 
 An independent review of the repository (2026-10-29) checked every number
@@ -305,3 +306,26 @@ Entries above are kept as written; these correct them.
   with a median of 7.9%. The RTX 2060's rows above 50% were 22 of 135.
 - Run 2: the synchronized timer closer to the events on the T4 held for
   CuPy only; on the RTX 2060, PyTorch read 0.616 against 0.642 ms.
+- Run 1: the entry first said "All 150 rows" and was changed to 135 in
+  `eaab5c3`, without a note; 135 is the count in the CSV.
+- Run 2's expectation: the RTX 2060's power is 160 W, not 170 W
+  ([HotHardware](https://hothardware.com/reviews/nvidia-geforce-rtx-2060-review)).
+- Runs 3 and 5: the times in their headers (17:29 and 17:50) are when the
+  CSV was written; the runs started at 17:27:58 and 17:49:38, as the stamp
+  records. The other headers use the start time.
+- Run 4: "0.528 ms" for the synchronized timer on PyTorch `matmul` 1024 is
+  0.527 ms (0.527478).
+- Run 5: the count of pairs with the synchronized timer below the events
+  was not given: 11 of 20 on PyTorch and 6 on CuPy, so the count did not
+  fall after the fix on either machine. The median of events minus
+  synchronized timer on PyTorch did: from 4.1 to 0.4 µs (RTX 2060) and from
+  2.5 to 0.8 µs (T4).
+- Run 5: "did not reappear on a quiet machine" implies Run 1's machine was
+  not quiet, which was not recorded. Run 1's NumPy dip did not reappear in
+  Run 5; why, is not known.
+- Runs 3 and 5: the two NumPy controls used different measures. On the
+  same one, `matmul` 4096, NumPy took 29% longer than Run 1 in Run 3 and
+  1% longer in Run 5.
+- Run 4: "with the same CuPy code" was not quite true: the reference moved
+  before the timing between Runs 2 and 4 (`fe568ad`), so the 12% between
+  them mixes the session and that change.

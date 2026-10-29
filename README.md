@@ -5,14 +5,19 @@ CUDA C kernel against cuBLAS later (phase 4), measured on Linux on an
 RTX 2060 and a cloud Tesla T4.
 
 Every result is stamped with the environment that produced it — GPU, driver,
-CUDA version, CPU, Python, OS — so any number here can be traced and reproduced.
+CUDA version, CPU, Python, OS, the git commit and the seed — so any number
+here can be traced to its machine and its code. Rerunning it the same way
+anywhere is phase 5.
 
 ## Results
 
 Phase 1 timed four operations with NumPy on the CPU and CuPy and PyTorch on
 the GPU, on both machines. Every result passed a correctness check against
-a float64 reference. Medians of 30 repetitions, GPU times from CUDA events;
-the full write-up is in [docs/phase-1-timing.md](docs/phase-1-timing.md).
+a float64 reference. Medians of 30 repetitions, GPU times from CUDA events,
+from Run 5 on the RTX 2060
+([CSV](results/20261029T175052Z_nvidia-geforce-rtx-2060.csv)) and Run 4 on
+the T4 ([CSV](results/20261029T173230Z_tesla-t4.csv)); the full write-up is
+in [docs/phase-1-timing.md](docs/phase-1-timing.md).
 
 | Largest size | RTX 2060 | Tesla T4 |
 |---|---:|---:|
@@ -23,8 +28,8 @@ the full write-up is in [docs/phase-1-timing.md](docs/phase-1-timing.md).
 
 CuPy and PyTorch tie on `matmul` at 4096 (both call cuBLAS). Each GPU is
 compared only with the CPU of its own machine: the two CPUs are very
-different chips. A T4 number holds to about 12%: two Colab sessions
-differed by that much on the same operation.
+different chips. T4 numbers are uncertain by at least 12%: two Colab
+sessions differed by that much on the same operation.
 
 ![matmul throughput by library](docs/img/matmul.png)
 
@@ -76,17 +81,19 @@ same architecture, not across generations.
 - **Warm-up is a fixed number of calls (20)**, but the GPU needs *time* to
   raise its clock after being idle: after seconds of CPU-only work, 20 calls
   were not enough (see phase 1). A time-based warm-up is not implemented yet.
-- **The RTX 2060's results are noisier** (median RSD 16.7% against 6.7% on
-  the T4), probably from the display and WSL2; not isolated yet.
-- **Which CUDA libraries ran is only partly known**: PyTorch is built for
-  CUDA 13.0 and its pip packages are 13.0–13.1, while the desktop's `nvcc`
-  is 13.4, and which CUDA CuPy loads was not checked. The `cuda_toolkit`
+- **The RTX 2060's results are noisier** (median RSD on the reference clocks
+  15.8% against 5.1% on the T4), probably from the display and WSL2; not
+  isolated yet.
+- **Which CUDA libraries ran is only partly known**: on the desktop,
+  PyTorch is built for CUDA 13.0 and its pip packages are 13.0–13.1, while
+  `nvcc` is 13.4; Colab runs its own builds (CuPy 14.0.1 there, against
+  14.2.0 here); and which CUDA CuPy loads was not checked. The `cuda_toolkit`
   field records the compiler, not the libraries the benchmarks ran on.
 - **The `matmul` tolerance (1e-3) is loose**: the largest error measured
   was 4.4e-6, so a reduced-precision matmul could still pass. PyTorch's
   float32 matmul precision is recorded on every row.
-- **One counted run per machine**: run-to-run variation is only estimated, from
-  two T4 sessions that differed by 12%.
+- **One counted run per machine**: run-to-run variation is only seen in two
+  T4 sessions that differed by 12%, with a harness change between them.
 - **Host-to-device copies come from ordinary (pageable) memory**; pinned
   memory is not measured yet.
 - **Some results are not explained yet**, and are listed as such in the
