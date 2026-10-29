@@ -124,9 +124,11 @@ def plot_operation(rows: list[Row], op: str, out: Path) -> Path:
 
 def plot_timers(rows: list[Row], out: Path) -> Path:
     """Matmul time by clock: what skipping synchronization reports."""
+    # Clocks, not libraries: drawn in ink and gray, solid and dashed, so they
+    # never borrow a library's color from the other charts.
     clocks = {
-        "cuda_events": ("CUDA events", "#2a78d6"),
-        "unsynced_cpu_timer": ("CPU timer, no synchronize", "#eb6834"),
+        "cuda_events": ("CUDA events", INK, "-"),
+        "unsynced_cpu_timer": ("CPU timer, no synchronize", MUTED, "--"),
     }
     matmul = [r for r in rows if r["op"] == "matmul" and r["backend"] == "torch"]
     machines = sorted({_machine(r) for r in matmul})
@@ -137,7 +139,7 @@ def plot_timers(rows: list[Row], out: Path) -> Path:
     panels = [axes] if len(machines) == 1 else list(axes)
     for ax, machine in zip(panels, machines, strict=True):
         _style(ax)
-        for method, (label, color) in clocks.items():
+        for method, (label, color, style) in clocks.items():
             points = sorted(
                 (int(r["size"]), float(r["median_ms"]))
                 for r in matmul
@@ -147,7 +149,14 @@ def plot_timers(rows: list[Row], out: Path) -> Path:
                 continue
             xs, ys = zip(*points, strict=True)
             ax.plot(
-                xs, ys, color=color, linewidth=2, marker="o", markersize=5, label=label
+                xs,
+                ys,
+                color=color,
+                linestyle=style,
+                linewidth=2,
+                marker="o",
+                markersize=5,
+                label=label,
             )
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
