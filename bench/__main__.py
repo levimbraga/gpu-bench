@@ -55,7 +55,18 @@ def main(argv: list[str] | None = None) -> int:
     table = sub.add_parser("table", help="render a results CSV as Markdown")
     table.add_argument("csv", type=Path)
 
+    plot = sub.add_parser("plot", help="draw one chart per operation as PNG")
+    plot.add_argument("csv", type=Path, nargs="+", help="one or more results CSVs")
+    plot.add_argument("--out", type=Path, default=Path("docs/img"))
+
     args = parser.parse_args(argv)
+    if args.command == "plot":
+        # Imported here so running benchmarks never needs matplotlib.
+        from bench.plot import plot_all
+
+        for path in plot_all(args.csv, args.out):
+            print(f"wrote {path}", file=sys.stderr)
+        return 0
     if args.command == "table":
         print(render(load(args.csv)))
         return 0
