@@ -14,6 +14,9 @@ it starts, then what happened. The phase write-up is built from this file.
   first clock) read 27% slower than the synchronized timer on a 1024 matmul.
   With 20 warm-up calls the gap fell to 2%. The GPU was still raising its
   clock. Default warm-up: 20.
+- The GPU slows down while idle and needs time, not a number of calls, to
+  speed up again: a warm-up of 20 calls is enough after another GPU run,
+  but not after seconds of CPU-only work.
 
 ## Checks before the first run
 
@@ -70,7 +73,36 @@ themselves. At 256, the spread was 13–56% with only 5 repetitions.
   largest, where the unsynchronized timer stays near the launch time while
   the events grow with the work.
 
-**What happened:**
+**What happened (2026-10-29 13:49 UTC, `results/20261029T135052Z_nvidia-geforce-rtx-2060.csv`):**
+
+All 150 rows passed the correctness check. Medians of 30 repetitions after
+20 warm-up calls; GPU times from CUDA events.
+
+- matmul 256: CuPy 0.093 ms against NumPy 0.198 ms, about 2.1×, as
+  expected. PyTorch was too noisy to rank (RSD 35–303%).
+- matmul 4096: 20.9 ms on both GPU libraries against 787 ms on NumPy, about
+  38×, inside the 30–60× expected. CuPy and PyTorch tied, as expected.
+- saxpy 2^16: NumPy fastest (0.023 ms against ~0.07 ms), as expected.
+- saxpy 2^24: the GPU was 21× faster (1.23 ms against 26.3 ms), not 10×.
+  The GPU reached 164 GB/s, about half the 336 GB/s on paper, as expected;
+  NumPy reached only 7.7 GB/s, well below the expected 19–38 GB/s.
+- unsynced timer: close to the events at the smallest sizes (0.062 against
+  0.068 ms on saxpy 2^16) and far apart at the largest (0.22 against
+  20.9 ms on matmul 4096), as expected. At matmul 4096 it implied
+  621 TFLOP/s against the 6.6 TFLOP/s measured with events: an error of
+  about 94×.
+
+**Not expected:**
+
+- CUDA events measured 6.59 TFLOP/s on matmul 4096, above the 6.45 TFLOP/s
+  computed from the card's rated boost clock (1,920 cores × 1.68 GHz × 2).
+  The card ran above its rated clock, so that number is not a ceiling.
+- On CuPy matmul 2048, CUDA events (4.12 ms) read above the synchronized
+  timer (2.88 ms). NumPy had just spent about 5 s on the same size, with the
+  GPU idle. 20 warm-up calls of ~3 ms are 60 ms: not enough for the GPU to
+  raise its clock again. Warm-up should be measured in time, not in calls.
+- NumPy matmul dropped to 33–82 GFLOP/s at 512 and 1024 (RSD ~40%), against
+  ~170 at 256, 2048 and 4096. Cause not known yet.
 
 ### Run 2 — Colab T4, same command
 
