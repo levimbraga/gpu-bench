@@ -34,17 +34,41 @@ reference. The unsynchronized timer measured the launch, not the work. The
 gap between events and the synchronized timer came from a warm-up too
 short for the GPU to reach its clock.
 
+### Check 2 — RTX 2060, all backends, matmul 256 and 1024, 5 repetitions
+
+**What happened (2026-10-29 UTC):** at 1024, CUDA events measured 0.56 ms
+(CuPy) and 0.58 ms (PyTorch) against 13.61 ms for NumPy, about 24×. The
+unsynchronized timer reported ~11,500 GFLOP/s, above the card's theoretical
+FP32 peak, which proves it measured the launch. The synchronized timer read
+~0.17 ms above the events at 1024, likely the cost of the synchronize calls
+themselves. At 256, the spread was 13–56% with only 5 repetitions.
+
 ## Runs
 
 ### Run 1 — RTX 2060, all operations, default sizes
 
 **Expectation (written before running):**
 
-- matmul, smallest size (256): fastest backend is ___, because ___
-- matmul, largest size (4096): fastest backend is ___, because ___
-- saxpy, smallest size (2^16): fastest backend is ___, because ___
-- saxpy, largest size (2^24): fastest backend is ___, because ___
-- the `unsynced_cpu_timer` row compared with `cuda_events`: ___
+- matmul, smallest size (256): CuPy and PyTorch about tied and around 2×
+  faster than NumPy, because both call cuBLAS and 33 MFLOP is already more
+  work than the fixed cost of a kernel launch, but too little to fill the GPU
+  (check 2 showed ~0.1 ms against ~0.21 ms).
+- matmul, largest size (4096): CuPy and PyTorch tied again (same cuBLAS
+  underneath), and 30–60× faster than NumPy, because the work grows as n³
+  and only the GPU has the throughput to absorb it: a few TFLOP/s against
+  ~150 GFLOP/s on the CPU.
+- saxpy, smallest size (2^16): NumPy fastest, because 768 KB fits in the
+  CPU's cache and the GPU spends most of its time on launch overhead, not on
+  the 65 thousand multiply-adds.
+- saxpy, largest size (2^24): the GPU backends fastest, around 10× ahead of
+  NumPy, because SAXPY is limited by memory, not math: the RTX 2060's memory
+  (~336 GB/s on paper) is roughly 10× the CPU's DDR4-2400 (~19–38 GB/s,
+  single or dual channel). Both GPU libraries will fall short of 336 GB/s,
+  since `a*x + y` runs as two kernels with a temporary array in between.
+- the `unsynced_cpu_timer` row compared with `cuda_events`: close at the
+  smallest sizes, where the launch is most of the cost; far apart at the
+  largest, where the unsynchronized timer stays near the launch time while
+  the events grow with the work.
 
 **What happened:**
 
