@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the harness that run on any machine (NumPy backend only)."""
 
+import dataclasses
+import sys
 import time
+import types
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,7 @@ from bench.backends import (
     Call,
     FloatArray,
     NumpyBackend,
+    TorchBackend,
     _GpuBackend,
 )
 from bench.harness import _per_second, measure, summarize
@@ -40,10 +44,14 @@ def test_a_wrong_result_fails_the_check() -> None:
 
 
 def test_summary_of_known_samples() -> None:
-    stats = summarize([1.0, 2.0, 3.0])
+    # Skewed on purpose: the median (2) and the mean (3) differ, so using one
+    # in place of the other fails here.
+    stats = summarize([1.0, 2.0, 6.0])
     assert stats["median_ms"] == 2.0
-    assert stats["stdev_ms"] == pytest.approx(1.0)
-    assert stats["rsd"] == pytest.approx(0.5)
+    assert stats["mean_ms"] == pytest.approx(3.0)
+    assert stats["stdev_ms"] == pytest.approx(7.0**0.5)
+    # The spread is relative to the mean, not to the median.
+    assert stats["rsd"] == pytest.approx(7.0**0.5 / 3.0)
 
 
 def test_one_repetition_is_refused() -> None:
@@ -127,6 +135,75 @@ def test_only_the_synced_timer_counts_the_wait() -> None:
     assert unsynced < 20
 
 
+class _CountingDevice(_FakeGpuBackend):
+    """Counts how many times the events clock runs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.event_timings = 0
+
+    def _events_ms(self, fn: Call) -> float:
+        self.event_timings += 1
+        return super()._events_ms(fn)
+
+
+def test_warmup_calls_run_before_the_timed_ones() -> None:
+    backend = _CountingDevice()
+    host = SAXPY.make_inputs(32, np.random.default_rng(0))
+    rows = measure(
+        backend, SAXPY, 32, host, SAXPY.reference(host), repetitions=2, warmup=3
+    )
+    # 3 discarded and 2 timed calls on this clock.
+    assert backend.event_timings == 5
+    assert all(row.warmup == 3 and row.repetitions == 2 for row in rows)
+
+
+def test_measure_uses_the_reference_it_is_given() -> None:
+    # The float64 reference is computed by the caller, once; measure() must
+    # not compute it again, which would leave the GPU idle before timing.
+    def no_reference(host: list[FloatArray]) -> npt.NDArray[np.float64]:
+        raise AssertionError("measure() computed the reference itself")
+
+    op = dataclasses.replace(SAXPY, reference=no_reference)
+    host = op.make_inputs(32, np.random.default_rng(0))
+    rows = measure(NumpyBackend(), op, 32, host, SAXPY.reference(host), 2, warmup=0)
+    assert all(row.correct for row in rows)
+
+
+def test_torch_events_are_created_once_outside_the_timed_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A stand-in for the torch module: enough for TorchBackend, and it counts
+    # every CUDA event created.
+    created: list[object] = []
+
+    class FakeEvent:
+        def __init__(self, enable_timing: bool = False) -> None:
+            created.append(self)
+
+        def record(self) -> None:
+            pass
+
+        def synchronize(self) -> None:
+            pass
+
+        def elapsed_time(self, end: object) -> float:
+            return 1.0
+
+    cuda = types.SimpleNamespace(
+        is_available=lambda: True, Event=FakeEvent, synchronize=lambda: None
+    )
+    fake_torch = types.SimpleNamespace(cuda=cuda, device=lambda name: name)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    backend = TorchBackend()
+    assert len(created) == 2
+    backend._events_ms(lambda: None)
+    backend._events_ms(lambda: None)
+    # No event created inside a timed call.
+    assert len(created) == 2
+
+
 def test_throughput_from_a_known_time() -> None:
     # 12 GB in one second is 12 GB/s.
     assert _per_second(12e9, 1000.0) == pytest.approx(12.0)
@@ -181,7 +258,17 @@ def test_transfer_is_measured_only_on_gpu_backends(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == []
 
 
-def test_run_writes_a_csv_that_renders(tmp_path: Path) -> None:
+def test_run_writes_a_csv_that_renders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seeds: list[object] = []
+    real_default_rng = np.random.default_rng
+
+    def spy_default_rng(seed: Any = None) -> np.random.Generator:
+        seeds.append(seed)
+        return real_default_rng(seed)
+
+    monkeypatch.setattr(np.random, "default_rng", spy_default_rng)
     status = main(
         [
             "run",
@@ -195,17 +282,21 @@ def test_run_writes_a_csv_that_renders(tmp_path: Path) -> None:
             "2",
             "--warmup",
             "0",
+            "--seed",
+            "7",
             "--out",
             str(tmp_path),
         ]
     )
     assert status == 0
+    # The inputs came from the seed given, and the CSV says which.
+    assert seeds == [7]
     (csv_path,) = tmp_path.iterdir()
     rows = load(csv_path)
     assert {row["op"] for row in rows} == {"saxpy"}
     # Every row carries the environment stamp and the knobs.
     assert all(row["gpu"] and row["dtype"] == "float32" for row in rows)
-    assert all(row["seed"] == "0" and row["git_commit"] for row in rows)
+    assert all(row["seed"] == "7" and row["git_commit"] for row in rows)
     table = render(rows)
     assert "### saxpy" in table
 
